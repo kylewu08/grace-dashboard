@@ -23,7 +23,7 @@ function rowClass(item: Task | Order) {
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const map: Record<string, string> = { '訂單': 'bg-blue-100 text-blue-800', '詢價': 'bg-emerald-100 text-emerald-800', 'Others': 'bg-purple-100 text-purple-800' }
+  const map: Record<string, string> = { 'Order': 'bg-blue-100 text-blue-800', 'RFQ': 'bg-emerald-100 text-emerald-800', 'Others': 'bg-purple-100 text-purple-800' }
   return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${map[type] ?? map.Others}`}>{type || 'Others'}</span>
 }
 
@@ -76,7 +76,7 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
           <input type="date" value={data.date||''} onChange={set('date')} required className={inputCls}/></div>
         <div><label className="block text-xs font-medium text-slate-600 mb-1">類型 *</label>
           <select value={data.type||''} onChange={set('type')} required className={inputCls}>
-            <option value="">選擇</option><option value="訂單">訂單</option><option value="詢價">詢價</option><option value="Others">Others</option>
+            <option value="">選擇</option><option value="Order">Order</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
           </select></div>
       </div>
       <div><label className="block text-xs font-medium text-slate-600 mb-1">內容 *</label>
@@ -209,7 +209,7 @@ export default function Home() {
   const monthlyMonths = Object.keys(monthlyMap).sort((a,b)=>b.localeCompare(a)).slice(0,6)
 
   const inquiryMap: Record<string,{total:number;byMonth:Record<string,number>}> = {}
-  tasks.filter(t=>t.type==='詢價').forEach(t => {
+  tasks.filter(t=>t.type==='RFQ').forEach(t => {
     const c=t.customerCode||'Unknown'; const m=(t.date||'').slice(0,7)
     if(!inquiryMap[c]) inquiryMap[c]={total:0,byMonth:{}}
     inquiryMap[c].total++; inquiryMap[c].byMonth[m]=(inquiryMap[c].byMonth[m]||0)+1
@@ -218,7 +218,8 @@ export default function Home() {
   const inquiryMonths = [...new Set(inquiryCustomers.flatMap(c=>Object.keys(inquiryMap[c].byMonth)))].sort((a,b)=>b.localeCompare(a)).slice(0,4)
 
   // 訂單頁面直接從 tasks 裡 type=訂單 的資料計算
-  const orderTasks = tasks.filter(t => t.type === '訂單')
+  const TYPE_ORDER: Record<string, number> = { 'Order': 0, 'RFQ': 1, 'Others': 2 }
+  const orderTasks = tasks.filter(t => t.type === 'Order')
   const ownerPending: Record<string,number> = {B:0,L:0,G:0}
   const ownerMonthly: Record<string,Record<string,number>> = {}
   orderTasks.forEach(t => {
@@ -234,7 +235,7 @@ export default function Home() {
   const filteredTasks = tasks
     .filter(t=>!taskFilter.type||t.type===taskFilter.type)
     .filter(t=>taskFilter.status==='all'?true:taskFilter.status==='done'?!!t.completedDate:!t.completedDate)
-    .sort((a,b)=>b.date.localeCompare(a.date))
+    .sort((a,b)=>{ const dc=b.date.localeCompare(a.date); if(dc!==0) return dc; return (TYPE_ORDER[a.type]??3)-(TYPE_ORDER[b.type]??3) })
 
   const filteredOrders = orderTasks
     .filter(t=>!orderFilter.owner||t.owner===orderFilter.owner)
@@ -343,7 +344,7 @@ export default function Home() {
               <span className="font-semibold text-slate-700 text-sm">任務列表</span>
               <div className="flex items-center gap-2">
                 <select value={taskFilter.type} onChange={e=>setTaskFilter(f=>({...f,type:e.target.value}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
-                  <option value="">全部類型</option><option value="訂單">訂單</option><option value="詢價">詢價</option><option value="Others">Others</option>
+                  <option value="">全部類型</option><option value="Order">Order</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
                 </select>
                 <select value={taskFilter.status} onChange={e=>setTaskFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
                   <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
@@ -406,7 +407,7 @@ export default function Home() {
               {monthlyMonths.length===0 ? <p className="text-slate-300 text-xs">暫無資料</p>
                 : <table className="w-full text-xs"><thead><tr className="text-left text-slate-400 border-b border-slate-100">
                   <th className="py-1.5 pr-3">月份</th><th className="py-1.5 text-right">整體</th>
-                  {['訂單','詢價','Others'].map(t=><th key={t} className="py-1.5 text-right">{t}</th>)}
+                  {['Order','RFQ','Others'].map(t=><th key={t} className="py-1.5 text-right">{t}</th>)}
                 </tr></thead><tbody>
                   {monthlyMonths.map(m=>{
                     const d=monthlyMap[m]; const pct=d.total?Math.round(d.done/d.total*100):0
@@ -414,7 +415,7 @@ export default function Home() {
                     return <tr key={m} className="border-b border-slate-50">
                       <td className="py-1.5 pr-3 font-medium text-slate-700">{m}</td>
                       <td className="py-1.5 text-right"><span className="text-slate-500">{d.done}/{d.total}</span><span className={`ml-1 font-semibold ${col}`}>{pct}%</span></td>
-                      {['訂單','詢價','Others'].map(tp=>{const td=d.byType[tp]||{total:0,done:0};const tp2=td.total?Math.round(td.done/td.total*100):null;return <td key={tp} className="py-1.5 text-right text-slate-500">{td.total?`${td.done}/${td.total} (${tp2}%)`:'—'}</td>})}
+                      {['Order','RFQ','Others'].map(tp=>{const td=d.byType[tp]||{total:0,done:0};const tp2=td.total?Math.round(td.done/td.total*100):null;return <td key={tp} className="py-1.5 text-right text-slate-500">{td.total?`${td.done}/${td.total} (${tp2}%)`:'—'}</td>})}
                     </tr>
                   })}
                 </tbody></table>}
@@ -515,11 +516,11 @@ export default function Home() {
                 <select value={orderFilter.status} onChange={e=>setOrderFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
                   <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
                 </select>
-                <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today(),type:'訂單'});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增訂單</button>
+                <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today(),type:'Order'});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增訂單</button>
               </div>
             </div>
             <div className="overflow-x-auto">
-              {filteredOrders.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無訂單（從儀表板新增類型為「訂單」的任務即會出現在此）</div>
+              {filteredOrders.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無訂單（從儀表板新增類型為「Order」的任務即會出現在此）</div>
                 : <table className="w-full text-xs"><thead><tr className="text-left text-slate-400 border-b border-slate-100">
                   <th className="px-4 py-2">日期</th><th className="px-3 py-2">內容</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2">Factory</th>
                   <th className="px-3 py-2">PO#</th><th className="px-3 py-2">SC#</th><th className="px-3 py-2">Owner</th><th className="px-3 py-2">狀態</th><th className="px-3 py-2">天數</th><th className="px-3 py-2 text-right">操作</th>
