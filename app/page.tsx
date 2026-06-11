@@ -23,7 +23,7 @@ function rowClass(item: Task | Order) {
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const map: Record<string, string> = { 'Order': 'bg-blue-100 text-blue-800', 'RFQ': 'bg-emerald-100 text-emerald-800', 'Others': 'bg-purple-100 text-purple-800' }
+  const map: Record<string, string> = { 'PO': 'bg-blue-100 text-blue-800', 'RFQ': 'bg-emerald-100 text-emerald-800', 'Others': 'bg-purple-100 text-purple-800' }
   return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${map[type] ?? map.Others}`}>{type || 'Others'}</span>
 }
 
@@ -76,7 +76,7 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
           <input type="date" value={data.date||''} onChange={set('date')} required className={inputCls}/></div>
         <div><label className="block text-xs font-medium text-slate-600 mb-1">類型 *</label>
           <select value={data.type||''} onChange={set('type')} required className={inputCls}>
-            <option value="">選擇</option><option value="Order">Order</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
+            <option value="">選擇</option><option value="PO">PO</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
           </select></div>
       </div>
       <div><label className="block text-xs font-medium text-slate-600 mb-1">內容 *</label>
@@ -191,7 +191,8 @@ export default function Home() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   // Stats
-  const pending = tasks.filter(t => !t.completedDate).length
+  const poPending = tasks.filter(t => !t.completedDate && t.type === 'PO').length
+  const nonPoPending = tasks.filter(t => !t.completedDate && t.type !== 'PO').length
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().split('T')[0] })()
   const weekDone = tasks.filter(t => t.completedDate >= weekStart && t.completedDate <= today()).length
   const yellowAlert = tasks.filter(t => !t.completedDate && (t.workingDays??0)>=3 && (t.workingDays??0)<5).length
@@ -218,8 +219,8 @@ export default function Home() {
   const inquiryMonths = [...new Set(inquiryCustomers.flatMap(c=>Object.keys(inquiryMap[c].byMonth)))].sort((a,b)=>b.localeCompare(a)).slice(0,4)
 
   // 訂單頁面直接從 tasks 裡 type=訂單 的資料計算
-  const TYPE_ORDER: Record<string, number> = { 'Order': 0, 'RFQ': 1, 'Others': 2 }
-  const orderTasks = tasks.filter(t => t.type === 'Order')
+  const TYPE_ORDER: Record<string, number> = { 'PO': 0, 'RFQ': 1, 'Others': 2 }
+  const orderTasks = tasks.filter(t => t.type === 'PO')
   const ownerPending: Record<string,number> = {B:0,L:0,G:0}
   const ownerMonthly: Record<string,Record<string,number>> = {}
   orderTasks.forEach(t => {
@@ -327,11 +328,12 @@ export default function Home() {
       <main className="max-w-screen-xl mx-auto px-4 py-5">
 
         {tab==='dashboard' && <div>
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <KpiCard label="今日待辦剩餘" value={pending} unit="件待處理" valueClass={pending>0?'text-orange-600':'text-slate-800'}/>
-            <KpiCard label="本週已完成" value={weekDone} unit="件完成" valueClass="text-emerald-600"/>
+          <div className="grid grid-cols-4 gap-3 mb-5">
+            <KpiCard label="PO 待完成" value={poPending} unit="件待處理" valueClass={poPending>0?'text-blue-600':'text-slate-800'}/>
+            <KpiCard label="PO 以外待完成" value={nonPoPending} unit="件待處理" valueClass={nonPoPending>0?'text-orange-600':'text-slate-800'}/>
+            <KpiCard label="本週已完成" value={weekDone} unit="件完成（含 PO）" valueClass="text-emerald-600"/>
             <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-xs text-slate-400 mb-2">延遲警告</p>
+              <p className="text-xs text-slate-400 mb-2">延遲警告（含 PO）</p>
               <div className="flex items-center gap-5">
                 <div><span className="text-2xl font-bold text-yellow-500">{yellowAlert}</span><span className="text-xs text-slate-400 ml-1">件 ≥3天</span></div>
                 <div><span className="text-2xl font-bold text-red-500">{redAlert}</span><span className="text-xs text-slate-400 ml-1">件 ≥5天</span></div>
@@ -344,7 +346,7 @@ export default function Home() {
               <span className="font-semibold text-slate-700 text-sm">任務列表</span>
               <div className="flex items-center gap-2">
                 <select value={taskFilter.type} onChange={e=>setTaskFilter(f=>({...f,type:e.target.value}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
-                  <option value="">全部類型</option><option value="Order">Order</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
+                  <option value="">全部類型</option><option value="PO">PO</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
                 </select>
                 <select value={taskFilter.status} onChange={e=>setTaskFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
                   <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
@@ -407,7 +409,7 @@ export default function Home() {
               {monthlyMonths.length===0 ? <p className="text-slate-300 text-xs">暫無資料</p>
                 : <table className="w-full text-xs"><thead><tr className="text-left text-slate-400 border-b border-slate-100">
                   <th className="py-1.5 pr-3">月份</th><th className="py-1.5 text-right">整體</th>
-                  {['Order','RFQ','Others'].map(t=><th key={t} className="py-1.5 text-right">{t}</th>)}
+                  {['PO','RFQ','Others'].map(t=><th key={t} className="py-1.5 text-right">{t}</th>)}
                 </tr></thead><tbody>
                   {monthlyMonths.map(m=>{
                     const d=monthlyMap[m]; const pct=d.total?Math.round(d.done/d.total*100):0
@@ -415,7 +417,7 @@ export default function Home() {
                     return <tr key={m} className="border-b border-slate-50">
                       <td className="py-1.5 pr-3 font-medium text-slate-700">{m}</td>
                       <td className="py-1.5 text-right"><span className="text-slate-500">{d.done}/{d.total}</span><span className={`ml-1 font-semibold ${col}`}>{pct}%</span></td>
-                      {['Order','RFQ','Others'].map(tp=>{const td=d.byType[tp]||{total:0,done:0};const tp2=td.total?Math.round(td.done/td.total*100):null;return <td key={tp} className="py-1.5 text-right text-slate-500">{td.total?`${td.done}/${td.total} (${tp2}%)`:'—'}</td>})}
+                      {['PO','RFQ','Others'].map(tp=>{const td=d.byType[tp]||{total:0,done:0};const tp2=td.total?Math.round(td.done/td.total*100):null;return <td key={tp} className="py-1.5 text-right text-slate-500">{td.total?`${td.done}/${td.total} (${tp2}%)`:'—'}</td>})}
                     </tr>
                   })}
                 </tbody></table>}
@@ -516,11 +518,11 @@ export default function Home() {
                 <select value={orderFilter.status} onChange={e=>setOrderFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
                   <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
                 </select>
-                <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today(),type:'Order'});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增訂單</button>
+                <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today(),type:'PO'});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增訂單</button>
               </div>
             </div>
             <div className="overflow-x-auto">
-              {filteredOrders.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無訂單（從儀表板新增類型為「Order」的任務即會出現在此）</div>
+              {filteredOrders.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無訂單（從儀表板新增類型為「PO」的任務即會出現在此）</div>
                 : <table className="w-full text-xs"><thead><tr className="text-left text-slate-400 border-b border-slate-100">
                   <th className="px-4 py-2">日期</th><th className="px-3 py-2">內容</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2">Factory</th>
                   <th className="px-3 py-2">PO#</th><th className="px-3 py-2">SC#</th><th className="px-3 py-2">Owner</th><th className="px-3 py-2">狀態</th><th className="px-3 py-2">天數</th><th className="px-3 py-2 text-right">操作</th>
