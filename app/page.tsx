@@ -70,7 +70,7 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
 }) {
   const set = (k: keyof Task) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value })
 
-  // RFQ 可填多個 ST（Factory Code）；底層仍存成逗號分隔的同一欄位
+  // RFQ 可填多個 Factory Code；底層仍存成逗號分隔的同一欄位
   const isRFQ = data.type === 'RFQ'
   const [stList, setStList] = useState<string[]>(() => {
     const parts = (data.factoryCode || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -105,12 +105,12 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
         <div><label className="block text-xs font-medium text-slate-600 mb-1">Customer Code</label>
           <input type="text" list="dl-cust" value={data.customerCode||''} onChange={set('customerCode')} className={inputCls}/>
           <datalist id="dl-cust">{config.customerCodes.map(c=><option key={c} value={c}/>)}</datalist></div>
-        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code{isRFQ && '（ST，可多個）'}</label>
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code{isRFQ && '（可多個）'}</label>
           {isRFQ ? (
             <div className="space-y-1.5">
               {stList.map((st, i) => (
                 <div key={i} className="flex items-center gap-1.5">
-                  <input type="text" list="dl-fact" value={st} placeholder={`ST ${i+1}`}
+                  <input type="text" list="dl-fact" value={st} placeholder={`Factory ${i+1}`}
                     onChange={e => updateSt(stList.map((v, idx) => idx === i ? e.target.value : v))}
                     className={inputCls}/>
                   {stList.length > 1 && (
@@ -120,7 +120,7 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
                 </div>
               ))}
               <button type="button" onClick={() => updateSt([...stList, ''])}
-                className="text-xs text-cyan-600 hover:text-cyan-700">+ 新增 ST</button>
+                className="text-xs text-cyan-600 hover:text-cyan-700">+ 新增 Factory</button>
               <datalist id="dl-fact">{config.factoryCodes.map(c=><option key={c} value={c}/>)}</datalist>
             </div>
           ) : (

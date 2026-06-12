@@ -271,7 +271,7 @@ export async function getConfig() {
 
 async function saveCode(type: string, value: string) {
   if (!value?.trim()) return
-  // 逗號分隔的多值（例如 RFQ 的多個 ST）拆開逐一記憶，維持單一代碼的 autocomplete
+  // 逗號分隔的多值（例如 RFQ 的多個 Factory Code）拆開逐一記憶，維持單一代碼的 autocomplete
   const values = [...new Set(value.split(',').map(v => v.trim()).filter(Boolean))]
   if (values.length === 0) return
   const sheets = getSheets()
