@@ -69,6 +69,26 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
   onCancel: () => void
 }) {
   const set = (k: keyof Task) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value })
+
+  // RFQ 可填多個 ST（Factory Code）；底層仍存成逗號分隔的同一欄位
+  const isRFQ = data.type === 'RFQ'
+  const [stList, setStList] = useState<string[]>(() => {
+    const parts = (data.factoryCode || '').split(',').map(s => s.trim()).filter(Boolean)
+    return parts.length ? parts : ['']
+  })
+  // 切換到 RFQ 時，用目前 factoryCode 重新初始化多欄位
+  useEffect(() => {
+    if (isRFQ) {
+      const parts = (data.factoryCode || '').split(',').map(s => s.trim()).filter(Boolean)
+      setStList(parts.length ? parts : [''])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRFQ])
+  const updateSt = (next: string[]) => {
+    setStList(next)
+    onChange({ ...data, factoryCode: next.map(s => s.trim()).filter(Boolean).join(', ') })
+  }
+
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit(data) }} className="px-5 py-4 space-y-3">
       <div className="grid grid-cols-2 gap-3">
@@ -85,9 +105,30 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
         <div><label className="block text-xs font-medium text-slate-600 mb-1">Customer Code</label>
           <input type="text" list="dl-cust" value={data.customerCode||''} onChange={set('customerCode')} className={inputCls}/>
           <datalist id="dl-cust">{config.customerCodes.map(c=><option key={c} value={c}/>)}</datalist></div>
-        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code</label>
-          <input type="text" list="dl-fact" value={data.factoryCode||''} onChange={set('factoryCode')} className={inputCls}/>
-          <datalist id="dl-fact">{config.factoryCodes.map(c=><option key={c} value={c}/>)}</datalist></div>
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code{isRFQ && '（ST，可多個）'}</label>
+          {isRFQ ? (
+            <div className="space-y-1.5">
+              {stList.map((st, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input type="text" list="dl-fact" value={st} placeholder={`ST ${i+1}`}
+                    onChange={e => updateSt(stList.map((v, idx) => idx === i ? e.target.value : v))}
+                    className={inputCls}/>
+                  {stList.length > 1 && (
+                    <button type="button" onClick={() => updateSt(stList.filter((_, idx) => idx !== i))}
+                      title="移除" className="shrink-0 w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded">✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => updateSt([...stList, ''])}
+                className="text-xs text-cyan-600 hover:text-cyan-700">+ 新增 ST</button>
+              <datalist id="dl-fact">{config.factoryCodes.map(c=><option key={c} value={c}/>)}</datalist>
+            </div>
+          ) : (
+            <>
+              <input type="text" list="dl-fact" value={data.factoryCode||''} onChange={set('factoryCode')} className={inputCls}/>
+              <datalist id="dl-fact">{config.factoryCodes.map(c=><option key={c} value={c}/>)}</datalist>
+            </>
+          )}</div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><label className="block text-xs font-medium text-slate-600 mb-1">Customer PO#</label>

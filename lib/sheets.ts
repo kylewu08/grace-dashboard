@@ -271,13 +271,17 @@ export async function getConfig() {
 
 async function saveCode(type: string, value: string) {
   if (!value?.trim()) return
+  // 逗號分隔的多值（例如 RFQ 的多個 ST）拆開逐一記憶，維持單一代碼的 autocomplete
+  const values = [...new Set(value.split(',').map(v => v.trim()).filter(Boolean))]
+  if (values.length === 0) return
   const sheets = getSheets()
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Config!A:B' })
   const rows = res.data.values ?? []
-  if (rows.some(r => r[0]===type && r[1]===value)) return
+  const toAdd = values.filter(v => !rows.some(r => r[0]===type && r[1]===v))
+  if (toAdd.length === 0) return
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID, range: 'Config!A1',
     valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-    requestBody: { values: [[type, value]] },
+    requestBody: { values: toAdd.map(v => [type, v]) },
   })
 }
