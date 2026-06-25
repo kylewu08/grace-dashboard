@@ -367,7 +367,7 @@ export default function Home() {
             <div className="w-7 h-7 bg-cyan-600 rounded-lg flex items-center justify-center">
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             </div>
-            <span className="font-bold text-slate-800">任務戰情儀表板</span>
+            <span className="font-bold text-slate-800">Grace LS FlowDesk</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400">{new Date().toLocaleDateString('zh-TW',{year:'numeric',month:'long',day:'numeric',weekday:'short'})}</span>
@@ -377,7 +377,7 @@ export default function Home() {
         <div className="max-w-screen-xl mx-auto px-4 flex gap-6">
           {(['dashboard','orders'] as Tab[]).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className={`py-2.5 text-xs border-b-2 -mb-px ${tab===t?'border-cyan-600 text-cyan-600 font-semibold':'border-transparent text-slate-500 hover:text-slate-700'}`}>
-              {t==='dashboard'?'儀表板':'訂單管理'}
+              {t==='dashboard'?'Dashboard':'Orders'}
             </button>
           ))}
         </div>
