@@ -63,6 +63,7 @@ export interface Task {
   owner: string
   status: string
   completedDate: string
+  archived: boolean
   workingDays: number | null
 }
 
@@ -102,7 +103,7 @@ export async function ensureSheets() {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID, range: 'Tasks!A1',
       valueInputOption: 'RAW',
-      requestBody: { values: [['ID','Date','Type','Content','CustomerCode','FactoryCode','CustomerPO','SCNumber','Note','Owner','Status','CompletedDate']] },
+      requestBody: { values: [['ID','Date','Type','Content','CustomerCode','FactoryCode','CustomerPO','SCNumber','Note','Owner','Status','CompletedDate','Archived']] },
     })
   }
   if (toCreate.includes('Orders')) {
@@ -126,17 +127,18 @@ export async function ensureSheets() {
 
 export async function getTasks(): Promise<Task[]> {
   const sheets = getSheets()
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Tasks!A2:L' })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Tasks!A2:M' })
   return (res.data.values ?? []).map(r => {
     const completedDate = fmt(r[11])
+    const archived = String(r[12] ?? '').toUpperCase() === 'TRUE'
     return {
       id: String(r[0] ?? ''), date: fmt(r[1]), type: String(r[2] ?? ''),
       content: String(r[3] ?? ''), customerCode: String(r[4] ?? ''),
       factoryCode: String(r[5] ?? ''), customerPO: String(r[6] ?? ''),
       scNumber: String(r[7] ?? ''), note: String(r[8] ?? ''),
       owner: String(r[9] ?? ''), status: String(r[10] ?? ''),
-      completedDate,
-      workingDays: !completedDate && r[1] ? workingDays(fmt(r[1])) : null,
+      completedDate, archived,
+      workingDays: !completedDate && !archived && r[1] ? workingDays(fmt(r[1])) : null,
     }
   }).filter(t => t.id)
 }
@@ -149,7 +151,7 @@ export async function addTask(d: Omit<Task, 'id' | 'workingDays'>) {
     valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [[id, d.date, d.type, d.content, d.customerCode,
       d.factoryCode, d.customerPO, d.scNumber, d.note, d.owner,
-      d.status || '處理中', d.completedDate ?? '']] },
+      d.status || '處理中', d.completedDate ?? '', d.archived ? 'TRUE' : '']] },
   })
   await saveCode('CustomerCode', d.customerCode)
   await saveCode('FactoryCode', d.factoryCode)
@@ -164,11 +166,11 @@ export async function updateTask(id: string, d: Omit<Task, 'id' | 'workingDays'>
   if (rowIdx < 0) throw new Error('Task not found')
   const row = rowIdx + 1
   await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID, range: `Tasks!B${row}:L${row}`,
+    spreadsheetId: SHEET_ID, range: `Tasks!B${row}:M${row}`,
     valueInputOption: 'RAW',
     requestBody: { values: [[d.date, d.type, d.content, d.customerCode,
       d.factoryCode, d.customerPO, d.scNumber, d.note, d.owner,
-      d.status || '處理中', d.completedDate ?? '']] },
+      d.status || '處理中', d.completedDate ?? '', d.archived ? 'TRUE' : '']] },
   })
   await saveCode('CustomerCode', d.customerCode)
   await saveCode('FactoryCode', d.factoryCode)

@@ -4,11 +4,11 @@ import { useEffect, useState, useCallback } from 'react'
 import type { Task, Order } from '@/lib/sheets'
 
 interface Config { customerCodes: string[]; factoryCodes: string[] }
-type FilterStatus = 'pending' | 'all' | 'done'
+type FilterStatus = 'pending' | 'all' | 'done' | 'archived'
 type Tab = 'dashboard' | 'orders'
 type ModalMode = 'task' | 'order' | null
 
-const EMPTY_TASK = { date: '', type: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', note: '', owner: '', status: '', completedDate: '' }
+const EMPTY_TASK = { date: '', type: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', note: '', owner: '', status: '', completedDate: '', archived: false }
 const EMPTY_ORDER = { receivedDate: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', owner: '', status: '', completedDate: '', note: '' }
 
 function today() { return new Date().toISOString().split('T')[0] }
@@ -16,6 +16,7 @@ function today() { return new Date().toISOString().split('T')[0] }
 function rowClass(item: Task | Order) {
   const cd = (item as Task).completedDate || (item as Order).completedDate
   if (cd) return 'row-done'
+  if ((item as Task).archived) return 'row-archived'
   const wd = item.workingDays ?? 0
   if (wd >= 5) return 'row-red'
   if (wd >= 3) return 'row-yellow'
@@ -70,20 +71,20 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
 }) {
   const set = (k: keyof Task) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value })
 
-  // RFQ 可填多個 Factory Code；底層仍存成逗號分隔的同一欄位
-  const isRFQ = data.type === 'RFQ'
+  // RFQ / PO 可填多個 Factory Code；底層仍存成逗號分隔的同一欄位
+  const isMulti = data.type === 'RFQ' || data.type === 'PO'
   const [stList, setStList] = useState<string[]>(() => {
     const parts = (data.factoryCode || '').split(',').map(s => s.trim()).filter(Boolean)
     return parts.length ? parts : ['']
   })
-  // 切換到 RFQ 時，用目前 factoryCode 重新初始化多欄位
+  // 切換到可多選類型時，用目前 factoryCode 重新初始化多欄位
   useEffect(() => {
-    if (isRFQ) {
+    if (isMulti) {
       const parts = (data.factoryCode || '').split(',').map(s => s.trim()).filter(Boolean)
       setStList(parts.length ? parts : [''])
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRFQ])
+  }, [isMulti])
   const updateSt = (next: string[]) => {
     setStList(next)
     onChange({ ...data, factoryCode: next.map(s => s.trim()).filter(Boolean).join(', ') })
@@ -105,8 +106,8 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
         <div><label className="block text-xs font-medium text-slate-600 mb-1">Customer Code</label>
           <input type="text" list="dl-cust" value={data.customerCode||''} onChange={set('customerCode')} className={inputCls}/>
           <datalist id="dl-cust">{config.customerCodes.map(c=><option key={c} value={c}/>)}</datalist></div>
-        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code{isRFQ && '（可多個）'}</label>
-          {isRFQ ? (
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">Factory Code{isMulti && '（可多個）'}</label>
+          {isMulti ? (
             <div className="space-y-1.5">
               {stList.map((st, i) => (
                 <div key={i} className="flex items-center gap-1.5">
@@ -232,12 +233,12 @@ export default function Home() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   // Stats
-  const poPending = tasks.filter(t => !t.completedDate && t.type === 'PO').length
-  const nonPoPending = tasks.filter(t => !t.completedDate && t.type !== 'PO').length
+  const poPending = tasks.filter(t => !t.completedDate && !t.archived && t.type === 'PO').length
+  const nonPoPending = tasks.filter(t => !t.completedDate && !t.archived && t.type !== 'PO').length
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().split('T')[0] })()
   const weekDone = tasks.filter(t => t.completedDate >= weekStart && t.completedDate <= today()).length
-  const yellowAlert = tasks.filter(t => !t.completedDate && (t.workingDays??0)>=3 && (t.workingDays??0)<5).length
-  const redAlert = tasks.filter(t => !t.completedDate && (t.workingDays??0)>=5).length
+  const yellowAlert = tasks.filter(t => !t.completedDate && !t.archived && (t.workingDays??0)>=3 && (t.workingDays??0)<5).length
+  const redAlert = tasks.filter(t => !t.completedDate && !t.archived && (t.workingDays??0)>=5).length
 
   const monthlyMap: Record<string,{total:number;done:number;byType:Record<string,{total:number;done:number}>}> = {}
   tasks.forEach(t => {
@@ -265,7 +266,7 @@ export default function Home() {
   const ownerPending: Record<string,number> = {B:0,L:0,G:0}
   const ownerMonthly: Record<string,Record<string,number>> = {}
   orderTasks.forEach(t => {
-    if(!t.completedDate && t.owner) ownerPending[t.owner]=(ownerPending[t.owner]||0)+1
+    if(!t.completedDate && !t.archived && t.owner) ownerPending[t.owner]=(ownerPending[t.owner]||0)+1
     if(t.completedDate && t.owner) {
       const m=t.completedDate.slice(0,7)
       if(!ownerMonthly[m]) ownerMonthly[m]={B:0,L:0,G:0}
@@ -274,14 +275,20 @@ export default function Home() {
   })
   const ownerMonths = Object.keys(ownerMonthly).sort((a,b)=>b.localeCompare(a)).slice(0,6)
 
+  const matchStatus = (t: Task, s: FilterStatus) =>
+    s==='all' ? true
+    : s==='done' ? !!t.completedDate
+    : s==='archived' ? !!t.archived
+    : (!t.completedDate && !t.archived)  // pending：排除已完成與已封存
+
   const filteredTasks = tasks
     .filter(t=>!taskFilter.type||t.type===taskFilter.type)
-    .filter(t=>taskFilter.status==='all'?true:taskFilter.status==='done'?!!t.completedDate:!t.completedDate)
+    .filter(t=>matchStatus(t, taskFilter.status))
     .sort((a,b)=>{ const dc=b.date.localeCompare(a.date); if(dc!==0) return dc; return (TYPE_ORDER[a.type]??3)-(TYPE_ORDER[b.type]??3) })
 
   const filteredOrders = orderTasks
     .filter(t=>!orderFilter.owner||t.owner===orderFilter.owner)
-    .filter(t=>orderFilter.status==='all'?true:orderFilter.status==='done'?!!t.completedDate:!t.completedDate)
+    .filter(t=>matchStatus(t, orderFilter.status))
     .sort((a,b)=>b.date.localeCompare(a.date))
 
   const tasksByDate: Record<string,Task[]> = {}
@@ -330,10 +337,20 @@ export default function Home() {
     const o = orders.find(o=>o.id===id)!; await saveOrder({...o, completedDate:date})
   }
 
-  function ActionBtns({ onComplete, onEdit, onDelete }: { onComplete?:()=>void; onEdit:()=>void; onDelete:()=>void }) {
+  async function toggleArchive(id: string, archived: boolean) {
+    if(archived && !confirm('封存此任務？封存後不會出現在待辦清單，但仍計為「未達成」。')) return
+    const t = tasks.find(t=>t.id===id)!; await saveTask({...t, archived})
+  }
+
+  function ActionBtns({ onComplete, onEdit, onDelete, onArchive, archived }: { onComplete?:()=>void; onEdit:()=>void; onDelete:()=>void; onArchive?:()=>void; archived?:boolean }) {
     return (
       <div className="flex items-center justify-end gap-0.5">
         {onComplete && <button onClick={onComplete} title="完成" className="p-1 text-emerald-500 hover:bg-emerald-50 rounded"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg></button>}
+        {onArchive && <button onClick={onArchive} title={archived?'取消封存':'封存'} className={`p-1 rounded ${archived?'text-amber-500 hover:bg-amber-50':'text-slate-400 hover:bg-slate-100'}`}>
+          {archived
+            ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9M9 14l3-3m0 0l3 3m-3-3v6"/></svg>
+            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8M10 12h4"/></svg>}
+        </button>}
         <button onClick={onEdit} title="編輯" className="p-1 text-slate-400 hover:bg-slate-100 rounded"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
         <button onClick={onDelete} title="刪除" className="p-1 text-slate-300 hover:text-red-400 hover:bg-red-50 rounded"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
       </div>
@@ -390,7 +407,7 @@ export default function Home() {
                   <option value="">全部類型</option><option value="PO">PO</option><option value="RFQ">RFQ</option><option value="Others">Others</option>
                 </select>
                 <select value={taskFilter.status} onChange={e=>setTaskFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
-                  <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
+                  <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option><option value="archived">已封存</option>
                 </select>
                 <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today()});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增任務</button>
               </div>
@@ -434,7 +451,7 @@ export default function Home() {
                             <td className="px-3 py-2">{t.owner&&<span className="px-1.5 py-0.5 bg-slate-100 rounded">{t.owner}</span>}</td>
                             <td className="px-3 py-2 text-slate-400 truncate max-w-0">{t.status}</td>
                             <td className="px-3 py-2"><DayTag item={t}/></td>
-                            <td className="px-3 py-2"><ActionBtns onComplete={!t.completedDate?()=>completeTask(t.id):undefined} onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)}/></td>
+                            <td className="px-3 py-2"><ActionBtns onComplete={!t.completedDate?()=>completeTask(t.id):undefined} onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)} onArchive={!t.completedDate?()=>toggleArchive(t.id, !t.archived):undefined} archived={t.archived}/></td>
                           </tr>
                         ))}
                       </>
@@ -557,7 +574,7 @@ export default function Home() {
                   <option value="">全部負責人</option><option value="B">B</option><option value="L">L</option><option value="G">G</option>
                 </select>
                 <select value={orderFilter.status} onChange={e=>setOrderFilter(f=>({...f,status:e.target.value as FilterStatus}))} className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
-                  <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option>
+                  <option value="pending">待處理</option><option value="all">全部</option><option value="done">已完成</option><option value="archived">已封存</option>
                 </select>
                 <button onClick={()=>{setEditingTask({...EMPTY_TASK,date:today(),type:'PO'});setModal('task')}} className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded-lg">+ 新增訂單</button>
               </div>
@@ -579,7 +596,7 @@ export default function Home() {
                       <td className="px-3 py-2">{t.owner&&<span className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">{t.owner}</span>}</td>
                       <td className="px-3 py-2 text-slate-400">{t.completedDate||t.status}</td>
                       <td className="px-3 py-2"><DayTag item={t}/></td>
-                      <td className="px-3 py-2"><ActionBtns onComplete={!t.completedDate?()=>completeTask(t.id):undefined} onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)}/></td>
+                      <td className="px-3 py-2"><ActionBtns onComplete={!t.completedDate?()=>completeTask(t.id):undefined} onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)} onArchive={!t.completedDate?()=>toggleArchive(t.id, !t.archived):undefined} archived={t.archived}/></td>
                     </tr>
                   ))}
                 </tbody></table>}
