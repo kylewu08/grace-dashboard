@@ -8,18 +8,31 @@ type FilterStatus = 'pending' | 'all' | 'done' | 'archived'
 type Tab = 'dashboard' | 'orders'
 type ModalMode = 'task' | 'order' | null
 
-const EMPTY_TASK = { date: '', type: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', note: '', owner: '', status: '', completedDate: '', archived: false }
+const EMPTY_TASK = { date: '', type: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', note: '', owner: '', status: '', completedDate: '', archived: false, dayLimit: null as number | null }
 const EMPTY_ORDER = { receivedDate: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', owner: '', status: '', completedDate: '', note: '' }
 
 function today() { return new Date().toISOString().split('T')[0] }
+
+// 依任務的手動允許工作天數（dayLimit）決定黃/紅門檻；沒設就用預設 3/5
+function alertLevel(item: Task | Order): '' | 'yellow' | 'red' {
+  if ((item as Task).completedDate) return ''
+  if ((item as Task).archived) return ''
+  const wd = item.workingDays ?? 0
+  const lim = (item as Task).dayLimit
+  const red = lim && lim > 0 ? lim : 5
+  const yellow = lim && lim > 0 ? Math.ceil(lim * 0.8) : 3
+  if (wd >= red) return 'red'
+  if (wd >= yellow) return 'yellow'
+  return ''
+}
 
 function rowClass(item: Task | Order) {
   const cd = (item as Task).completedDate || (item as Order).completedDate
   if (cd) return 'row-done'
   if ((item as Task).archived) return 'row-archived'
-  const wd = item.workingDays ?? 0
-  if (wd >= 5) return 'row-red'
-  if (wd >= 3) return 'row-yellow'
+  const lvl = alertLevel(item)
+  if (lvl === 'red') return 'row-red'
+  if (lvl === 'yellow') return 'row-yellow'
   return ''
 }
 
@@ -32,9 +45,12 @@ function DayTag({ item }: { item: Task | Order }) {
   const cd = (item as Task).completedDate
   if (cd) return <span className="text-xs text-emerald-600">✓ {cd}</span>
   const d = item.workingDays ?? 0
-  if (d >= 5) return <span className="text-xs text-red-600 font-semibold">⚠ {d}天</span>
-  if (d >= 3) return <span className="text-xs text-yellow-600 font-semibold">⚡ {d}天</span>
-  return <span className="text-xs text-slate-400">{d}天</span>
+  const lim = (item as Task).dayLimit
+  const suffix = lim && lim > 0 ? `${d}/${lim}天` : `${d}天`
+  const lvl = alertLevel(item)
+  if (lvl === 'red') return <span className="text-xs text-red-600 font-semibold">⚠ {suffix}</span>
+  if (lvl === 'yellow') return <span className="text-xs text-yellow-600 font-semibold">⚡ {suffix}</span>
+  return <span className="text-xs text-slate-400">{suffix}</span>
 }
 
 function KpiCard({ label, value, unit, valueClass }: { label: string; value: number; unit: string; valueClass: string }) {
@@ -147,8 +163,14 @@ function TaskForm({ data, config, saving, onChange, onSubmit, onCancel }: {
       </div>
       <div><label className="block text-xs font-medium text-slate-600 mb-1">備註</label>
         <input type="text" value={data.note||''} onChange={set('note')} className={inputCls}/></div>
-      <div><label className="block text-xs font-medium text-slate-600 mb-1">完成日期（填入即視為完成）</label>
-        <input type="date" value={data.completedDate||''} onChange={set('completedDate')} className={inputCls}/></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">完成日期（填入即視為完成）</label>
+          <input type="date" value={data.completedDate||''} onChange={set('completedDate')} className={inputCls}/></div>
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">允許工作天數（選填）</label>
+          <input type="number" min={1} value={data.dayLimit ?? ''} placeholder="預設 3/5"
+            onChange={e => onChange({ ...data, dayLimit: e.target.value === '' ? null : Number(e.target.value) })}
+            className={inputCls}/></div>
+      </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={onCancel} className="px-4 py-1.5 border border-slate-200 rounded-lg text-slate-600 text-xs">取消</button>
         <button type="submit" disabled={saving} className="px-4 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-xs disabled:opacity-50">{saving?'儲存中...':'儲存'}</button>
@@ -237,8 +259,8 @@ export default function Home() {
   const nonPoPending = tasks.filter(t => !t.completedDate && !t.archived && t.type !== 'PO').length
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().split('T')[0] })()
   const weekDone = tasks.filter(t => t.completedDate >= weekStart && t.completedDate <= today()).length
-  const yellowAlert = tasks.filter(t => !t.completedDate && !t.archived && (t.workingDays??0)>=3 && (t.workingDays??0)<5).length
-  const redAlert = tasks.filter(t => !t.completedDate && !t.archived && (t.workingDays??0)>=5).length
+  const yellowAlert = tasks.filter(t => alertLevel(t)==='yellow').length
+  const redAlert = tasks.filter(t => alertLevel(t)==='red').length
 
   const monthlyMap: Record<string,{total:number;done:number;byType:Record<string,{total:number;done:number}>}> = {}
   tasks.forEach(t => {
@@ -393,8 +415,8 @@ export default function Home() {
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-xs text-slate-400 mb-2">延遲警告（含 PO）</p>
               <div className="flex items-center gap-5">
-                <div><span className="text-2xl font-bold text-yellow-500">{yellowAlert}</span><span className="text-xs text-slate-400 ml-1">件 ≥3天</span></div>
-                <div><span className="text-2xl font-bold text-red-500">{redAlert}</span><span className="text-xs text-slate-400 ml-1">件 ≥5天</span></div>
+                <div><span className="text-2xl font-bold text-yellow-500">{yellowAlert}</span><span className="text-xs text-slate-400 ml-1">件 黃燈</span></div>
+                <div><span className="text-2xl font-bold text-red-500">{redAlert}</span><span className="text-xs text-slate-400 ml-1">件 紅燈</span></div>
               </div>
             </div>
           </div>
@@ -414,10 +436,10 @@ export default function Home() {
             </div>
             <div className="overflow-x-auto">
               {taskDates.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無任務</div>
-                : <table className="w-full text-xs">
+                : <table className="w-full table-fixed text-xs min-w-[560px]">
                   <colgroup>
-                    <col style={{width:'80px'}}/><col/><col style={{width:'100px'}}/><col style={{width:'80px'}}/>
-                    <col style={{width:'130px'}}/><col style={{width:'90px'}}/><col style={{width:'60px'}}/><col style={{width:'90px'}}/><col style={{width:'75px'}}/><col style={{width:'90px'}}/>
+                    <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'260px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
+                    <col/>{/* PO# */}<col/>{/* SC# */}<col style={{width:'52px'}}/>{/* Owner */}<col/>{/* 狀態 */}<col style={{width:'82px'}}/>{/* 天數 */}<col style={{width:'92px'}}/>{/* 操作 */}
                   </colgroup>
                   <thead><tr className="text-left text-slate-400 bg-slate-50 border-b border-slate-100">
                     <th className="px-4 py-2">類型</th><th className="px-3 py-2">內容</th><th className="px-3 py-2">Customer</th>
@@ -443,13 +465,13 @@ export default function Home() {
                         {list.map(t=>(
                           <tr key={t.id} className={`border-b border-slate-50 hover:bg-slate-50 ${rowClass(t)}`}>
                             <td className="px-4 py-2"><TypeBadge type={t.type}/></td>
-                            <td className="px-3 py-2 text-slate-700 truncate max-w-0">{t.content}</td>
-                            <td className="px-3 py-2 text-slate-400">{t.customerCode}</td>
-                            <td className="px-3 py-2 text-slate-400">{t.factoryCode}</td>
-                            <td className="px-3 py-2 text-slate-400">{t.customerPO}</td>
-                            <td className="px-3 py-2 text-slate-400">{t.scNumber}</td>
+                            <td className="px-3 py-2 text-slate-700 truncate">{t.content}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate">{t.customerCode}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate">{t.factoryCode}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate">{t.customerPO}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate">{t.scNumber}</td>
                             <td className="px-3 py-2">{t.owner&&<span className="px-1.5 py-0.5 bg-slate-100 rounded">{t.owner}</span>}</td>
-                            <td className="px-3 py-2 text-slate-400 truncate max-w-0">{t.status}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate">{t.status}</td>
                             <td className="px-3 py-2"><DayTag item={t}/></td>
                             <td className="px-3 py-2"><ActionBtns onComplete={!t.completedDate?()=>completeTask(t.id):undefined} onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)} onArchive={!t.completedDate?()=>toggleArchive(t.id, !t.archived):undefined} archived={t.archived}/></td>
                           </tr>
@@ -516,10 +538,10 @@ export default function Home() {
                   <span className="text-xs text-slate-400">{doneTasks.length} 件</span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full table-fixed text-xs min-w-[560px]">
                     <colgroup>
-                      <col style={{width:'80px'}}/><col/><col style={{width:'100px'}}/><col style={{width:'80px'}}/>
-                      <col style={{width:'130px'}}/><col style={{width:'90px'}}/><col style={{width:'60px'}}/><col style={{width:'90px'}}/><col style={{width:'75px'}}/><col style={{width:'90px'}}/>
+                      <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'260px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
+                      <col/>{/* PO# */}<col/>{/* SC# */}<col style={{width:'52px'}}/>{/* Owner */}<col style={{width:'88px'}}/>{/* 完成日 */}<col/>{/* 狀態 */}<col style={{width:'92px'}}/>{/* 操作 */}
                     </colgroup>
                     <thead><tr className="text-left text-slate-400 bg-slate-50 border-b border-slate-100">
                       <th className="px-4 py-2">類型</th><th className="px-3 py-2">內容</th><th className="px-3 py-2">Customer</th>
@@ -540,14 +562,14 @@ export default function Home() {
                           {list.map(t => (
                             <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 row-done">
                               <td className="px-4 py-2"><TypeBadge type={t.type}/></td>
-                              <td className="px-3 py-2 text-slate-700 truncate max-w-0">{t.content}</td>
-                              <td className="px-3 py-2 text-slate-400">{t.customerCode}</td>
-                              <td className="px-3 py-2 text-slate-400">{t.factoryCode}</td>
-                              <td className="px-3 py-2 text-slate-400">{t.customerPO}</td>
-                              <td className="px-3 py-2 text-slate-400">{t.scNumber}</td>
+                              <td className="px-3 py-2 text-slate-700 truncate">{t.content}</td>
+                              <td className="px-3 py-2 text-slate-400 truncate">{t.customerCode}</td>
+                              <td className="px-3 py-2 text-slate-400 truncate">{t.factoryCode}</td>
+                              <td className="px-3 py-2 text-slate-400 truncate">{t.customerPO}</td>
+                              <td className="px-3 py-2 text-slate-400 truncate">{t.scNumber}</td>
                               <td className="px-3 py-2">{t.owner&&<span className="px-1.5 py-0.5 bg-slate-100 rounded">{t.owner}</span>}</td>
-                              <td className="px-3 py-2 text-emerald-600">✓ {t.completedDate}</td>
-                              <td className="px-3 py-2 text-slate-400 truncate max-w-0">{t.status}</td>
+                              <td className="px-3 py-2 text-emerald-600 whitespace-nowrap">✓ {t.completedDate}</td>
+                              <td className="px-3 py-2 text-slate-400 truncate">{t.status}</td>
                               <td className="px-3 py-2"><ActionBtns onEdit={()=>{setEditingTask(t);setModal('task')}} onDelete={()=>deleteTaskById(t.id)}/></td>
                             </tr>
                           ))}
