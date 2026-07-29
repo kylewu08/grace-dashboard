@@ -153,24 +153,70 @@ export default function InspectionTab({ config, poTasks }: { config: Config; poT
   )
 }
 
+function poLabel(t: Task) {
+  return [t.scNumber && `SC ${t.scNumber}`, t.customerPO && `PO ${t.customerPO}`, t.customerCode, t.content].filter(Boolean).join(' · ')
+}
+
+// 可打字搜尋的 PO 連動欄位
+function POSearch({ poTasks, linkedTaskId, onPick, onClear }: {
+  poTasks: Task[]; linkedTaskId: string; onPick: (t: Task) => void; onClear: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const linked = poTasks.find(t => t.id === linkedTaskId)
+
+  if (linked) {
+    return (
+      <div className="flex items-center gap-2 border border-cyan-200 bg-cyan-50 rounded-lg px-3 py-1.5">
+        <span className="text-cyan-600 shrink-0">🔗</span>
+        <span className="text-sm text-slate-700 truncate flex-1">{poLabel(linked).slice(0, 60) || '(已連動)'}</span>
+        <button type="button" onClick={onClear} className="shrink-0 text-xs text-slate-400 hover:text-red-500">清除</button>
+      </div>
+    )
+  }
+
+  const q = query.trim().toLowerCase()
+  const matches = q === '' ? [] : poTasks.filter(t =>
+    [t.customerPO, t.scNumber, t.customerCode, t.content].some(v => (v || '').toLowerCase().includes(q))
+  ).slice(0, 8)
+
+  return (
+    <div className="relative">
+      <input type="text" value={query} placeholder="輸入 PO# / SC# / 客戶 搜尋…"
+        onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className={inputCls} />
+      {open && q !== '' && (
+        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto text-sm">
+          {matches.length === 0 ? <li className="px-3 py-2 text-slate-400 text-xs">查無符合的 PO</li>
+            : matches.map(t => (
+              <li key={t.id}>
+                <button type="button" onMouseDown={e => e.preventDefault()}
+                  onClick={() => { onPick(t); setQuery(''); setOpen(false) }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-cyan-50 text-slate-700 truncate">
+                  {poLabel(t)}
+                </button>
+              </li>
+            ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function CardForm({ data, config, poTasks, saving, onChange, onSubmit, onCancel }: {
   data: Partial<Inspection>; config: Config; poTasks: Task[]; saving: boolean
   onChange: (d: Partial<Inspection>) => void; onSubmit: (d: Partial<Inspection>) => void; onCancel: () => void
 }) {
   const set = (k: keyof Inspection) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value })
-  const onPickPO = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const t = poTasks.find(p => p.id === e.target.value)
-    if (!t) { onChange({ ...data, linkedTaskId: '' }); return }
-    onChange({ ...data, linkedTaskId: t.id, customerCode: t.customerCode || data.customerCode || '', factoryCode: t.factoryCode || data.factoryCode || '', customerPO: t.customerPO || '', scNumber: t.scNumber || '', orderNo: data.orderNo || t.scNumber || t.customerPO || '' })
-  }
+  const pickPO = (t: Task) => onChange({ ...data, linkedTaskId: t.id, customerCode: t.customerCode || data.customerCode || '', factoryCode: t.factoryCode || data.factoryCode || '', customerPO: t.customerPO || '', scNumber: t.scNumber || '', orderNo: data.orderNo || t.scNumber || t.customerPO || '' })
+  const clearPO = () => onChange({ ...data, linkedTaskId: '' })
   return (
     <Modal title={data.id ? '編輯驗貨單' : '新增驗貨單'} onClose={onCancel}>
       <form onSubmit={e => { e.preventDefault(); onSubmit(data) }} className="px-5 py-4 space-y-3">
-        <div><label className="block text-xs font-medium text-slate-600 mb-1">連動現有 PO（選填，會自動帶入客戶/PO#/SC#）</label>
-          <select value={data.linkedTaskId || ''} onChange={onPickPO} className={inputCls}>
-            <option value="">— 不連動，手動輸入 —</option>
-            {poTasks.map(t => <option key={t.id} value={t.id}>{[t.scNumber && `SC ${t.scNumber}`, t.customerPO && `PO ${t.customerPO}`, t.customerCode, t.content].filter(Boolean).join(' · ').slice(0, 60)}</option>)}
-          </select></div>
+        <div><label className="block text-xs font-medium text-slate-600 mb-1">連動現有 PO（選填，輸入 PO# / SC# / 客戶 搜尋）</label>
+          <POSearch poTasks={poTasks} linkedTaskId={data.linkedTaskId || ''} onPick={pickPO} onClear={clearPO} /></div>
         <div><label className="block text-xs font-medium text-slate-600 mb-1">貨品／訂單編號 *</label>
           <input type="text" value={data.orderNo || ''} onChange={set('orderNo')} required className={inputCls} /></div>
         <div className="grid grid-cols-2 gap-3">
