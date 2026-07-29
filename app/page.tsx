@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { Task, Order } from '@/lib/sheets'
+import InspectionTab from '@/components/InspectionTab'
+import ComplaintTab from '@/components/ComplaintTab'
 
 interface Config { customerCodes: string[]; factoryCodes: string[] }
 type FilterStatus = 'pending' | 'all' | 'done' | 'archived'
-type Tab = 'dashboard' | 'orders'
+type Tab = 'dashboard' | 'orders' | 'inspection' | 'complaints'
 type ModalMode = 'task' | 'order' | null
 
 const EMPTY_TASK = { date: '', type: '', content: '', customerCode: '', factoryCode: '', customerPO: '', scNumber: '', note: '', owner: '', status: '', completedDate: '', archived: false, dayLimit: null as number | null }
@@ -397,9 +399,9 @@ export default function Home() {
           </div>
         </div>
         <div className="max-w-screen-xl mx-auto px-4 flex gap-6">
-          {(['dashboard','orders'] as Tab[]).map(t=>(
+          {(['dashboard','orders','inspection','complaints'] as Tab[]).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className={`py-2.5 text-xs border-b-2 -mb-px ${tab===t?'border-cyan-600 text-cyan-600 font-semibold':'border-transparent text-slate-500 hover:text-slate-700'}`}>
-              {t==='dashboard'?'Dashboard':'Orders'}
+              {t==='dashboard'?'Dashboard':t==='orders'?'Orders':t==='inspection'?'Inspection':'Complaints'}
             </button>
           ))}
         </div>
@@ -641,6 +643,10 @@ export default function Home() {
               </tbody></table>}
           </div>
         </div>}
+
+        {tab==='inspection' && <InspectionTab config={config} poTasks={tasks.filter(t=>t.type==='PO')} />}
+
+        {tab==='complaints' && <ComplaintTab config={config} />}
       </main>
 
       {modal==='task' && <Modal title={editingTask.id?'編輯任務':'新增任務'} onClose={()=>setModal(null)}>
