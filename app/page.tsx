@@ -440,7 +440,7 @@ export default function Home() {
               {taskDates.length===0 ? <div className="p-8 text-center text-slate-300 text-sm">尚無任務</div>
                 : <table className="w-full table-fixed text-xs min-w-[560px]">
                   <colgroup>
-                    <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'260px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
+                    <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'34%',minWidth:'240px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
                     <col/>{/* PO# */}<col/>{/* SC# */}<col style={{width:'52px'}}/>{/* Owner */}<col/>{/* 狀態 */}<col style={{width:'82px'}}/>{/* 天數 */}<col style={{width:'92px'}}/>{/* 操作 */}
                   </colgroup>
                   <thead><tr className="text-left text-slate-400 bg-slate-50 border-b border-slate-100">
@@ -542,7 +542,7 @@ export default function Home() {
                 <div className="overflow-x-auto">
                   <table className="w-full table-fixed text-xs min-w-[560px]">
                     <colgroup>
-                      <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'260px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
+                      <col style={{width:'72px'}}/>{/* 類型 */}<col style={{width:'34%',minWidth:'240px'}}/>{/* 內容 */}<col/>{/* Customer */}<col/>{/* Factory */}
                       <col/>{/* PO# */}<col/>{/* SC# */}<col style={{width:'52px'}}/>{/* Owner */}<col style={{width:'88px'}}/>{/* 完成日 */}<col/>{/* 狀態 */}<col style={{width:'92px'}}/>{/* 操作 */}
                     </colgroup>
                     <thead><tr className="text-left text-slate-400 bg-slate-50 border-b border-slate-100">
